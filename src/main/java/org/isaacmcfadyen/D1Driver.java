@@ -8,9 +8,9 @@ public class D1Driver implements Driver {
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
         String[] parts = url.split(":");
-        String DatabaseUuid = parts[2].replace("//", "");
-        String AccountId = info.getProperty("user");
-        String ApiKey = info.getProperty("password");
+        String DatabaseUuid = parts[2].replace("//", "").trim();
+        String AccountId = info.getProperty("user").trim();
+        String ApiKey = info.getProperty("password").trim();
         return new D1Connection(ApiKey, AccountId, DatabaseUuid);
     }
 

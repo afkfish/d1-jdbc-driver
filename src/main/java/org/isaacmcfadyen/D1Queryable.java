@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -92,25 +93,37 @@ public abstract class D1Queryable {
             connection.getOutputStream().close();
 
             if (connection.getResponseCode() != 200) {
-                if (connection.getResponseCode() == 404) {
-                    throw new SQLException("Invalid D1 database ID.");
-                } else if (connection.getResponseCode() == 400) {
-                    throw new SQLException("Invalid query.");
-                } else if (connection.getResponseCode() == 500) {
-                    InputStream errorStream = connection.getErrorStream();
-                    String result = new BufferedReader(new InputStreamReader(errorStream)).lines().parallel().collect(Collectors.joining("\n"));
-                    throw new SQLException(result);
+                int statusCode = connection.getResponseCode();
+                InputStream errorStream = connection.getErrorStream();
+                if (errorStream != null) {
+                    String errorBody = new BufferedReader(new InputStreamReader(errorStream, StandardCharsets.UTF_8))
+                            .lines().collect(Collectors.joining("\n"));
+                    try {
+                        JSONObject errorJson = new JSONObject(errorBody);
+                        JSONArray errors = errorJson.optJSONArray("errors");
+                        if (errors != null && errors.length() > 0) {
+                            String msg = errors.getJSONObject(0).optString("message", errorBody);
+                            throw new SQLException("HTTP " + statusCode + ": " + msg);
+                        }
+                    } catch (SQLException e) {
+                        throw e;
+                    } catch (Exception ignored) {}
+                    throw new SQLException("HTTP " + statusCode + ": " + errorBody);
                 }
-
-                throw new SQLException(connection.getResponseMessage());
+                throw new SQLException("HTTP " + statusCode + ": " + connection.getResponseMessage());
             }
 
             InputStream inputStream = connection.getInputStream();
-            String result = new BufferedReader(new InputStreamReader(inputStream)).lines().parallel().collect(Collectors.joining("\n"));
+            String result = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+                    .lines().collect(Collectors.joining("\n"));
             JSONObject json = new JSONObject(result);
 
             if (!json.getBoolean("success")) {
-                throw new SQLException(json.getJSONArray("result").getJSONObject(0).getString("error"));
+                JSONArray errors = json.optJSONArray("errors");
+                if (errors != null && errors.length() > 0) {
+                    throw new SQLException(errors.getJSONObject(0).optString("message", "Unknown error"));
+                }
+                throw new SQLException("Query failed");
             }
 
             connection.disconnect();
