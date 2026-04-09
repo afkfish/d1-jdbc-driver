@@ -158,6 +158,11 @@ public abstract class D1Queryable {
                             .put("file", "main")));
         }
 
+        // D1 blocks all PRAGMA operations on its internal _cf_KV table.
+        if (lower.contains("_cf_kv")) {
+            return new JSONObject().put("results", new JSONArray());
+        }
+
         if (lower.equals("pragma collation_list")) {
             return new JSONObject().put("results",
                     new JSONArray()
