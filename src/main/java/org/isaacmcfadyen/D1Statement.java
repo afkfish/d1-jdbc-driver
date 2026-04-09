@@ -1,46 +1,37 @@
 package org.isaacmcfadyen;
 
 import org.json.JSONObject;
-import org.json.JSONArray;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.stream.Collectors;
 
 public class D1Statement extends D1Queryable implements Statement {
     private boolean closed = false;
     private D1ResultSet currentResultSet;
     private final D1Connection parentConnection;
 
-    D1Statement(String ApiKey, String AccountId, String DatabaseUuid, D1Connection connection) {
-        super(ApiKey, AccountId, DatabaseUuid);
+    D1Statement(String apiToken, String accountId, String databaseId, D1Connection connection) {
+        super(apiToken, accountId, databaseId);
         this.parentConnection = connection;
     }
 
-
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        JSONObject json = queryDatabase(sql);
-        return generateResultSet(json, sql);
+        JSONObject json = queryDatabase(sql, null);
+        currentResultSet = generateResultSet(json, sql);
+        return currentResultSet;
     }
 
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        queryDatabase(sql);
-        return 0;
+        queryDatabase(sql, null);
+        return 1;
     }
 
     @Override
     public void close() throws SQLException {
         synchronized (this) {
             closed = true;
-            if(currentResultSet != null) {
+            if (currentResultSet != null) {
                 currentResultSet.close();
             }
         }
@@ -53,7 +44,6 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public void setMaxFieldSize(int max) throws SQLException {
-
     }
 
     @Override
@@ -63,22 +53,19 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public void setMaxRows(int max) throws SQLException {
-
     }
 
     @Override
     public void setEscapeProcessing(boolean enable) throws SQLException {
-
     }
 
     @Override
     public int getQueryTimeout() throws SQLException {
-        return 10;
+        return 0;
     }
 
     @Override
     public void setQueryTimeout(int seconds) throws SQLException {
-
     }
 
     @Override
@@ -93,19 +80,17 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public void clearWarnings() throws SQLException {
-
     }
 
     @Override
     public void setCursorName(String name) throws SQLException {
-
     }
 
     @Override
     public boolean execute(String sql) throws SQLException {
-        JSONObject json = queryDatabase(sql);
+        JSONObject json = queryDatabase(sql, null);
         currentResultSet = generateResultSet(json, sql);
-        return json.getJSONArray("results").length() > 0;
+        return currentResultSet.getRowCount() > 0;
     }
 
     @Override
@@ -115,9 +100,6 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public int getUpdateCount() throws SQLException {
-        // TODO: This is basically an indicator. When a SELECT query updates some rows this will return
-        // the number of rows updated, so the DB engine can requery to see the updates.
-        // Because D1 doesn't return update count yet we just return -1 to everything.
         return -1;
     }
 
@@ -127,7 +109,9 @@ public class D1Statement extends D1Queryable implements Statement {
     }
 
     @Override
-    public void setFetchDirection(int direction) throws SQLException {}
+    public void setFetchDirection(int direction) throws SQLException {
+    }
+
     @Override
     public int getFetchDirection() throws SQLException {
         return ResultSet.FETCH_FORWARD;
@@ -154,17 +138,17 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public void addBatch(String sql) throws SQLException {
-        throw new SQLException("Not implemented: addBatch(String sql)");
+        throw new SQLFeatureNotSupportedException("addBatch not supported");
     }
 
     @Override
     public void clearBatch() throws SQLException {
-        throw new SQLException("Not implemented: clearBatch()");
+        throw new SQLFeatureNotSupportedException("clearBatch not supported");
     }
 
     @Override
     public int[] executeBatch() throws SQLException {
-        throw new SQLException("Not implemented: executeBatch()");
+        throw new SQLFeatureNotSupportedException("executeBatch not supported");
     }
 
     @Override
@@ -179,42 +163,42 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public ResultSet getGeneratedKeys() throws SQLException {
-        throw new SQLException("Not implemented: getGeneratedKeys()");
+        return null;
     }
 
     @Override
     public int executeUpdate(String sql, int autoGeneratedKeys) throws SQLException {
-        throw new SQLException("Not implemented: executeUpdate(String sql, int autoGeneratedKeys)");
+        return executeUpdate(sql);
     }
 
     @Override
     public int executeUpdate(String sql, int[] columnIndexes) throws SQLException {
-        throw new SQLException("Not implemented: executeUpdate(String sql, int[] columnIndexes)");
+        return executeUpdate(sql);
     }
 
     @Override
     public int executeUpdate(String sql, String[] columnNames) throws SQLException {
-        throw new SQLException("Not implemented: executeUpdate(String sql, String[] columnNames)");
+        return executeUpdate(sql);
     }
 
     @Override
     public boolean execute(String sql, int autoGeneratedKeys) throws SQLException {
-        throw new SQLException("Not implemented: execute(String sql, int autoGeneratedKeys)");
+        return execute(sql);
     }
 
     @Override
     public boolean execute(String sql, int[] columnIndexes) throws SQLException {
-        throw new SQLException("Not implemented: execute(String sql, int[] columnIndexes)");
+        return execute(sql);
     }
 
     @Override
     public boolean execute(String sql, String[] columnNames) throws SQLException {
-        throw new SQLException("Not implemented: execute(String sql, String[] columnNames)");
+        return execute(sql);
     }
 
     @Override
     public int getResultSetHoldability() throws SQLException {
-        throw new SQLException("Not implemented: getResultSetHoldability()");
+        return 0;
     }
 
     @Override
@@ -224,22 +208,20 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public void setPoolable(boolean poolable) throws SQLException {
-        throw new SQLException("Not implemented: setPoolable(boolean poolable)");
     }
 
     @Override
     public boolean isPoolable() throws SQLException {
-        throw new SQLException("Not implemented: isPoolable()");
+        return false;
     }
 
     @Override
     public void closeOnCompletion() throws SQLException {
-        throw new SQLException("Not implemented: closeOnCompletion()");
     }
 
     @Override
     public boolean isCloseOnCompletion() throws SQLException {
-        throw new SQLException("Not implemented: isCloseOnCompletion()");
+        return false;
     }
 
     @Override
