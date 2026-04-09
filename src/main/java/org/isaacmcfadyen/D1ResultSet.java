@@ -286,13 +286,13 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Object getObject(int columnIndex) throws SQLException {
-        ArrayList<Object> row = rows.get(currentRow - 1);
+        List<Object> row = rows.get(currentRow - 1);
         return row.get(columnIndex - 1);
     }
 
     @Override
     public Object getObject(String columnLabel) throws SQLException {
-        ArrayList<Object> row = rows.get(currentRow - 1);
+        List<Object> row = rows.get(currentRow - 1);
         return row.get(columnNames.indexOf(columnLabel));
     }
 
