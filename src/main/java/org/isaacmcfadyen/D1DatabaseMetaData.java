@@ -78,12 +78,12 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public String getDriverVersion() throws SQLException {
-        return "1.0";
+        return "2.0";
     }
 
     @Override
     public int getDriverMajorVersion() {
-        return 1;
+        return 2;
     }
 
     @Override
@@ -1084,12 +1084,12 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public int getJDBCMajorVersion() throws SQLException {
-        return 0;
+        return 4;
     }
 
     @Override
     public int getJDBCMinorVersion() throws SQLException {
-        return 0;
+        return 2;
     }
 
     @Override

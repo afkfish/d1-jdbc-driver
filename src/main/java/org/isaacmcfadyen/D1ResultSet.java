@@ -415,7 +415,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public void setFetchSize(int rows) throws SQLException {
-        throw new SQLException("Not implemented: setFetchSize(int rows)");
+        // no-op
     }
 
     @Override
