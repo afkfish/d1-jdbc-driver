@@ -701,7 +701,8 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
             return null;
         }
         String tableName = tableNamePattern.replaceAll("\\\\", "");
-        JSONObject json = queryDatabase("PRAGMA table_info(" + tableName + ")", null);
+        String quotedTable = "\"" + tableName.replace("\"", "\"\"") + "\"";
+        JSONObject json = queryDatabase("PRAGMA table_info(" + quotedTable + ")", null);
         JSONArray results = json.getJSONArray("results");
 
         List<String> columnNames = new ArrayList<>();
@@ -823,7 +824,8 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public ResultSet getPrimaryKeys(String catalog, String schema, String table) throws SQLException {
-        JSONObject results = queryDatabase("PRAGMA table_info(" + table + ")", null);
+        String quotedTable = "\"" + table.replace("\"", "\"\"") + "\"";
+        JSONObject results = queryDatabase("PRAGMA table_info(" + quotedTable + ")", null);
         JSONArray columns = results.getJSONArray("results");
 
         JSONObject primaryKeyColumn = null;
@@ -921,7 +923,8 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
         ruleMap.put("SET DEFAULT", DatabaseMetaData.importedKeySetDefault);
         ruleMap.put("RESTRICT", DatabaseMetaData.importedKeyRestrict);
 
-        JSONObject results = queryDatabase("PRAGMA foreign_key_list(" + foreignTable + ")", null);
+        String quotedFk = "\"" + foreignTable.replace("\"", "\"\"") + "\"";
+        JSONObject results = queryDatabase("PRAGMA foreign_key_list(" + quotedFk + ")", null);
         JSONArray fkList = results.getJSONArray("results");
         List<List<Object>> rows = new ArrayList<>();
 
