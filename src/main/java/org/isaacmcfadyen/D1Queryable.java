@@ -152,6 +152,7 @@ public abstract class D1Queryable {
         // SQLite system tables
         return name.equals("sqlite_master")
                 || name.equals("sqlite_schema")
+                || name.equals("sqlite_temp_schema")
                 || name.equals("sqlite_sequence")
                 || name.equals("sqlite_stat1")
                 || name.equals("sqlite_stat2")
@@ -185,7 +186,7 @@ public abstract class D1Queryable {
      * introspection.
      */
     private JSONObject preProcessQuery(String sql) {
-        String lower = sql.trim().toLowerCase();
+        String lower = sql.trim().replaceAll(";\\s*$", "").toLowerCase();
 
         if (lower.equals("pragma database_list")) {
             return new JSONObject().put("results",
@@ -335,7 +336,8 @@ public abstract class D1Queryable {
 
             // Strip internal/system tables from PRAGMA table_list results so
             // that schema browsers never discover or attempt to introspect them.
-            String trimmedLower = sql.trim().toLowerCase();
+            // Strip trailing semicolons before matching to handle user-typed queries.
+            String trimmedLower = sql.trim().replaceAll(";\\s*$", "").toLowerCase();
             if (trimmedLower.equals("pragma table_list")
                     || trimmedLower.matches("pragma\\s+\"?\\w+\"?\\.table_list")) {
                 resultObj = filterTableList(resultObj);
