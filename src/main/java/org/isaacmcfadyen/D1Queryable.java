@@ -12,6 +12,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -279,6 +280,81 @@ public abstract class D1Queryable {
         }
 
         return null;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Batch query
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Execute multiple SQL statements in a single D1 API call using the
+     * {@code batch} request format. Returns the number of rows changed by each
+     * statement in the same order.
+     */
+    protected int[] executeBatchQuery(JSONArray batch) throws SQLException {
+        try {
+            URL url = new URL("https://api.cloudflare.com/client/v4/accounts/"
+                    + accountId + "/d1/database/" + databaseId + "/query");
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Authorization", "Bearer " + apiToken);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Connection", "keep-alive");
+            connection.setDoOutput(true);
+
+            JSONObject body = new JSONObject().put("batch", batch);
+            byte[] bodyBytes = body.toString().getBytes(StandardCharsets.UTF_8);
+            connection.getOutputStream().write(bodyBytes);
+            connection.getOutputStream().flush();
+            connection.getOutputStream().close();
+
+            if (connection.getResponseCode() != 200) {
+                int statusCode = connection.getResponseCode();
+                InputStream errorStream = connection.getErrorStream();
+                String errorBody = errorStream != null
+                        ? new BufferedReader(new InputStreamReader(errorStream, StandardCharsets.UTF_8))
+                                .lines().collect(Collectors.joining("\n"))
+                        : connection.getResponseMessage();
+                throw new SQLException("HTTP " + statusCode + ": " + errorBody);
+            }
+
+            String result = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))
+                    .lines().collect(Collectors.joining("\n"));
+            JSONObject json = new JSONObject(result);
+
+            if (!json.getBoolean("success")) {
+                JSONArray errors = json.optJSONArray("errors");
+                if (errors != null && !errors.isEmpty()) {
+                    throw new SQLException(errors.getJSONObject(0).optString("message", "Batch failed"));
+                }
+                throw new SQLException("Batch query failed");
+            }
+
+            JSONArray results = json.getJSONArray("result");
+            int[] updateCounts = new int[results.length()];
+            for (int i = 0; i < results.length(); i++) {
+                JSONObject res = results.getJSONObject(i);
+                if (!res.optBoolean("success", true)) {
+                    updateCounts[i] = Statement.EXECUTE_FAILED;
+                } else {
+                    JSONObject meta = res.optJSONObject("meta");
+                    updateCounts[i] = meta != null ? Math.max(0, meta.optInt("changes", 0)) : 0;
+                    // Update shared meta fields to the last statement's values.
+                    if (meta != null && i == results.length() - 1) {
+                        lastUpdateCount = meta.optInt("changes", -1);
+                        lastInsertId = meta.optLong("last_row_id", 0);
+                    }
+                }
+            }
+            return updateCounts;
+
+        } catch (SQLException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new SQLException(e.getMessage(), e);
+        }
     }
 
     // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ public class D1PreparedStatement extends D1Queryable implements PreparedStatemen
     private final String sql;
     private JSONArray params = new JSONArray();
     private D1ResultSet cachedResults = null;
+    private final List<JSONArray> batchParamsList = new ArrayList<>();
 
     D1PreparedStatement(String apiToken, String accountId, String databaseId, String sql) {
         super(apiToken, accountId, databaseId);
@@ -235,7 +236,8 @@ public class D1PreparedStatement extends D1Queryable implements PreparedStatemen
 
     @Override
     public void addBatch() throws SQLException {
-        throw new SQLFeatureNotSupportedException("Batch not supported");
+        // Snapshot the current params and store them for later batch execution.
+        batchParamsList.add(new JSONArray(params.toString()));
     }
 
     // ---------------------------------------------------------------------------
@@ -288,8 +290,18 @@ public class D1PreparedStatement extends D1Queryable implements PreparedStatemen
     @Override public int getResultSetConcurrency() throws SQLException { return 0; }
     @Override public int getResultSetType() throws SQLException { return ResultSet.TYPE_FORWARD_ONLY; }
     @Override public void addBatch(String sql) throws SQLException { }
-    @Override public void clearBatch() throws SQLException { }
-    @Override public int[] executeBatch() throws SQLException { return new int[0]; }
+    @Override public void clearBatch() throws SQLException { batchParamsList.clear(); }
+    @Override
+    public int[] executeBatch() throws SQLException {
+        JSONArray batch = new JSONArray();
+        for (JSONArray p : batchParamsList) {
+            JSONObject stmt = new JSONObject().put("sql", sql);
+            if (!p.isEmpty()) stmt.put("params", p);
+            batch.put(stmt);
+        }
+        batchParamsList.clear();
+        return executeBatchQuery(batch);
+    }
     @Override public Connection getConnection() throws SQLException { return null; }
     @Override public boolean getMoreResults(int current) throws SQLException { return false; }
     @Override

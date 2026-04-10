@@ -11,6 +11,7 @@ public class D1Statement extends D1Queryable implements Statement {
     private boolean closed = false;
     private D1ResultSet currentResultSet;
     private final D1Connection parentConnection;
+    private final List<String> batchStatements = new ArrayList<>();
 
     D1Statement(String apiToken, String accountId, String databaseId, D1Connection connection) {
         super(apiToken, accountId, databaseId);
@@ -141,17 +142,22 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public void addBatch(String sql) throws SQLException {
-        throw new SQLFeatureNotSupportedException("addBatch not supported");
+        batchStatements.add(sql);
     }
 
     @Override
     public void clearBatch() throws SQLException {
-        throw new SQLFeatureNotSupportedException("clearBatch not supported");
+        batchStatements.clear();
     }
 
     @Override
     public int[] executeBatch() throws SQLException {
-        throw new SQLFeatureNotSupportedException("executeBatch not supported");
+        org.json.JSONArray batch = new org.json.JSONArray();
+        for (String sql : batchStatements) {
+            batch.put(new org.json.JSONObject().put("sql", sql));
+        }
+        batchStatements.clear();
+        return executeBatchQuery(batch);
     }
 
     @Override
