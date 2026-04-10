@@ -3,22 +3,16 @@ package org.isaacmcfadyen;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.lang.reflect.Type;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData {
     private final D1Connection parentConnection;
 
-    D1DatabaseMetaData(String ApiKey, String AccountId, String DatabaseUuid, D1Connection connection) {
-        super(ApiKey, AccountId, DatabaseUuid);
+    D1DatabaseMetaData(String apiToken, String accountId, String databaseId, D1Connection connection) {
+        super(apiToken, accountId, databaseId);
         this.parentConnection = connection;
     }
 
@@ -34,7 +28,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public String getURL() throws SQLException {
-        return String.format("jbdc:d1://%s", DatabaseUuid);
+        return String.format("jdbc:d1://%s", databaseId);
     }
 
     @Override
@@ -69,12 +63,12 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public String getDatabaseProductName() throws SQLException {
-        return "Cloudflare D1";
+        return "SQLite";
     }
 
     @Override
     public String getDatabaseProductVersion() throws SQLException {
-        return null;
+        return "3.45.1";
     }
 
     @Override
@@ -84,12 +78,12 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public String getDriverVersion() throws SQLException {
-        return "1.0";
+        return "2.0";
     }
 
     @Override
     public int getDriverMajorVersion() {
-        return 1;
+        return 2;
     }
 
     @Override
@@ -99,7 +93,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public boolean usesLocalFiles() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -109,7 +103,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public boolean supportsMixedCaseIdentifiers() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -154,27 +148,27 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public String getSQLKeywords() throws SQLException {
-        throw new SQLException("Not implemented: getSQLKeywords()");
+        return "";
     }
 
     @Override
     public String getNumericFunctions() throws SQLException {
-        throw new SQLException("Not implemented: getNumericFunctions()");
+        return "ABS,MAX,MIN,ROUND,UPPER,LOWER,LENGTH,SUBSTR,REPLACE,TRIM,LTRIM,RTRIM,HEX,QUOTE,RANDOMBLOB,ZEROBLOB,TYPEOF,LAST_INSERT_ROWID,CHANGES,TOTAL_CHANGES,COALESCE,NULLIF,IFNULL,IIF";
     }
 
     @Override
     public String getStringFunctions() throws SQLException {
-        throw new SQLException("Not implemented: getStringFunctions()");
+        return "LENGTH,LOWER,LTRIM,REPLACE,RTRIM,SUBSTR,TRIM,UPPER,CHAR,GLOB,LIKE,HEX,QUOTE,SOUNDEX,UNICODE,INSTR";
     }
 
     @Override
     public String getSystemFunctions() throws SQLException {
-        throw new SQLException("Not implemented: getSystemFunctions()");
+        return "LAST_INSERT_ROWID,CHANGES,TOTAL_CHANGES,SQLITE_VERSION,SQLITE_SOURCE_ID";
     }
 
     @Override
     public String getTimeDateFunctions() throws SQLException {
-        throw new SQLException("Not implemented: getTimeDateFunctions()");
+        return "DATE,TIME,DATETIME,JULIANDAY,STRFTIME";
     }
 
     @Override
@@ -184,7 +178,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public String getExtraNameCharacters() throws SQLException {
-        throw new SQLException("Not implemented: getExtraNameCharacters()");
+        return "";
     }
 
     @Override
@@ -324,27 +318,27 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public String getSchemaTerm() throws SQLException {
-        return null;
+        return "schema";
     }
 
     @Override
     public String getProcedureTerm() throws SQLException {
-        return "Procedure";
+        return "not_implemented";
     }
 
     @Override
     public String getCatalogTerm() throws SQLException {
-        return null;
+        return "catalog";
     }
 
     @Override
     public boolean isCatalogAtStart() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
     public String getCatalogSeparator() throws SQLException {
-        throw new SQLException("Not implemented: getCatalogSeparator()");
+        return ".";
     }
 
     @Override
@@ -624,66 +618,59 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String[] types) throws SQLException {
-        JSONObject json = queryDatabase("PRAGMA table_list");
+        JSONObject json = queryDatabase("PRAGMA table_list", null);
         JSONArray tables = json.getJSONArray("results");
 
-        ArrayList<String> columnNames = new ArrayList<>();
-        ArrayList<ArrayList<Object>> rows = new ArrayList<>();
-
-        // Define the preset columns.
+        List<String> columnNames = new ArrayList<>();
         columnNames.add("TABLE_CAT");
         columnNames.add("TABLE_SCHEM");
         columnNames.add("TABLE_NAME");
         columnNames.add("TABLE_TYPE");
 
+        List<List<Object>> rows = new ArrayList<>();
         for (int i = 0; i < tables.length(); i++) {
-            ArrayList<Object> row = new ArrayList<>();
             JSONObject table = tables.getJSONObject(i);
-
-            String tableCatalog = null;
-            String tableSchema = table.getString("schema");
             String tableName = table.getString("name");
-            String tableType = table.getString("type");
 
-            row.add(tableCatalog);
-            row.add(tableSchema);
+            // Hide Cloudflare-internal and SQLite system tables from table browsers.
+            if (D1Queryable.isInternalTable(tableName)) continue;
+
+            List<Object> row = new ArrayList<>();
+            row.add(null);
+            row.add(table.getString("schema"));
             row.add(tableName);
-            row.add(tableType);
-
+            row.add(table.getString("type").toUpperCase());
             rows.add(row);
         }
 
-        JSONObject stringType = new JSONObject();
-        stringType.put("type", "TEXT");
-        JSONArray columnSchema = new JSONArray();
-        columnSchema.put(stringType);
-        columnSchema.put(stringType);
-        columnSchema.put(stringType);
-        columnSchema.put(stringType);
+        JSONObject stringType = new JSONObject().put("type", "TEXT");
+        List<JSONObject> columnSchema = new ArrayList<>();
+        columnSchema.add(stringType);
+        columnSchema.add(stringType);
+        columnSchema.add(stringType);
+        columnSchema.add(stringType);
 
-        return new D1ResultSet(ApiKey, AccountId, DatabaseUuid, columnNames, rows, columnSchema);
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, columnNames, columnSchema);
     }
 
     @Override
     public ResultSet getSchemas() throws SQLException {
-        ArrayList<String> columnNames = new ArrayList<>();
-        ArrayList<ArrayList<Object>> rows = new ArrayList<>();
-
+        List<String> columnNames = new ArrayList<>();
         columnNames.add("TABLE_SCHEM");
         columnNames.add("TABLE_CATALOG");
 
-        ArrayList<Object> row = new ArrayList<>();
+        List<Object> row = new ArrayList<>();
         row.add(null);
         row.add(null);
+        List<List<Object>> rows = new ArrayList<>();
         rows.add(row);
 
-        JSONObject stringType = new JSONObject();
-        stringType.put("type", "TEXT");
-        JSONArray columnSchema = new JSONArray();
-        columnSchema.put(stringType);
-        columnSchema.put(stringType);
+        JSONObject stringType = new JSONObject().put("type", "TEXT");
+        List<JSONObject> columnSchema = new ArrayList<>();
+        columnSchema.add(stringType);
+        columnSchema.add(stringType);
 
-        return new D1ResultSet(ApiKey, AccountId, DatabaseUuid, columnNames, rows, columnSchema);
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, columnNames, columnSchema);
     }
 
     @Override
@@ -693,36 +680,32 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public ResultSet getTableTypes() throws SQLException {
-        ArrayList<String> columnNames = new ArrayList<>();
-        ArrayList<ArrayList<Object>> rows = new ArrayList<>();
-
+        List<String> columnNames = new ArrayList<>();
         columnNames.add("TABLE_TYPE");
-        ArrayList<Object> row = new ArrayList<>();
+
+        List<Object> row = new ArrayList<>();
         row.add("TABLE");
+        List<List<Object>> rows = new ArrayList<>();
         rows.add(row);
 
-        JSONObject stringType = new JSONObject();
-        stringType.put("type", "TEXT");
-        JSONArray columnSchema = new JSONArray();
-        columnSchema.put(stringType);
+        JSONObject stringType = new JSONObject().put("type", "TEXT");
+        List<JSONObject> columnSchema = new ArrayList<>();
+        columnSchema.add(stringType);
 
-        return new D1ResultSet(ApiKey, AccountId, DatabaseUuid, columnNames, rows, columnSchema);
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, columnNames, columnSchema);
     }
 
     @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws SQLException {
-        if(tableNamePattern.length() == 0) {
+        if (tableNamePattern == null || tableNamePattern.isEmpty()) {
             return null;
         }
-        System.out.println(tableNamePattern);
-        System.out.println("PRAGMA table_info(" + tableNamePattern.replaceAll("\\\\", "") + ")");
-        String command = "PRAGMA table_info(" + tableNamePattern.replaceAll("\\\\", "") + ")";
-        JSONObject json = queryDatabase(command);
+        String tableName = tableNamePattern.replaceAll("\\\\", "");
+        String quotedTable = "\"" + tableName.replace("\"", "\"\"") + "\"";
+        JSONObject json = queryDatabase("PRAGMA table_info(" + quotedTable + ")", null);
         JSONArray results = json.getJSONArray("results");
 
-        ArrayList<String> columnNames = new ArrayList<>();
-        ArrayList<ArrayList<Object>> rows = new ArrayList<>();
-
+        List<String> columnNames = new ArrayList<>();
         columnNames.add("TABLE_CAT");
         columnNames.add("TABLE_SCHEM");
         columnNames.add("TABLE_NAME");
@@ -748,138 +731,75 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
         columnNames.add("IS_AUTOINCREMENT");
         columnNames.add("IS_GENERATEDCOLUMN");
 
+        List<List<Object>> rows = new ArrayList<>();
         for (int i = 0; i < results.length(); i++) {
             JSONObject column = results.getJSONObject(i);
-            ArrayList<Object> row = new ArrayList<>();
+            List<Object> row = new ArrayList<>();
+            String type = column.getString("type").toUpperCase();
 
-            // TABLE_CAT
-            row.add(null);
-            // TABLE_SCHEM
-            row.add(null);
-            // TABLE_NAME
-            row.add(tableNamePattern);
-            // COLUMN_NAME
-            row.add(column.getString("name"));
+            row.add(null); // TABLE_CAT
+            row.add(null); // TABLE_SCHEM
+            row.add(tableName); // TABLE_NAME
+            row.add(column.getString("name")); // COLUMN_NAME
+
             // DATA_TYPE
-            String type = column.getString("type");
             if (type.contains("CHAR") || type.contains("CLOB") || type.contains("TEXT")) {
                 row.add(Types.VARCHAR);
             } else if (type.contains("INT")) {
                 row.add(Types.INTEGER);
-            } else if (type.contains("REAL") || type.contains("DOB") || type.contains("FLOA")) {
+            } else if (type.contains("REAL") || type.contains("DOUB") || type.contains("FLOA")) {
                 row.add(Types.DOUBLE);
-            } else if (type.contains("BLOB") || type.length() == 0) {
+            } else if (type.contains("BOOL")) {
+                row.add(Types.BOOLEAN);
+            } else if (type.contains("BLOB") || type.isEmpty()) {
                 row.add(Types.BLOB);
             } else {
                 row.add(Types.NUMERIC);
             }
-            // TYPE_NAME
-            row.add(column.getString("type"));
-            // COLUMN_SIZE
-            row.add(null);
-            // BUFFER_LENGTH
-            row.add(null);
-            // DECIMAL_DIGITS
-            row.add(null);
-            // NUM_PREC_RADIX
-            row.add(null);
-            // NULLABLE
-            row.add(column.getInt("notnull") == 0 ? columnNullable : columnNoNulls);
-            // REMARKS
-            row.add(null);
+
+            row.add(column.getString("type")); // TYPE_NAME
+            row.add(null); // COLUMN_SIZE
+            row.add(null); // BUFFER_LENGTH
+            row.add(null); // DECIMAL_DIGITS
+            row.add(null); // NUM_PREC_RADIX
+            row.add(column.getInt("notnull") == 0 ? columnNullable : columnNoNulls); // NULLABLE
+            row.add(null); // REMARKS
+
             // COLUMN_DEF
-            Object columnDef = column.get("dflt_value");
-            if (columnDef == JSONObject.NULL) {
+            Object dflt = column.get("dflt_value");
+            if (JSONObject.NULL.equals(dflt)) {
                 row.add(null);
+            } else if (type.contains("REAL") || type.contains("DOUB") || type.contains("FLOA") || type.contains("INT")) {
+                row.add(dflt.toString());
             } else {
-                if(type.contains("REAL") || type.contains("DOB") || type.contains("FLOA") || type.contains("INT")) {
-                    row.add(columnDef.toString());
-                } else {
-                    row.add("'" + columnDef.toString() + "'");
-                }
+                row.add("'" + dflt + "'");
             }
-            // SQL_DATA_TYPE
-            row.add(null);
-            // SQL_DATETIME_SUB
-            row.add(null);
-            // CHAR_OCTET_LENGTH
-            row.add(null);
-            // ORDINAL_POSITION
-            row.add(i + 1);
-            // IS_NULLABLE
-            row.add(column.getInt("notnull") == 0 ? "YES" : "NO");
-            // SCOPE_CATLOG
-            row.add(null);
-            // SCOPE_SCHEMA
-            row.add(null);
-            // SCOPE_TABLE
-            row.add(null);
-            // SOURCE_DATA_TYPE
-            row.add(null);
-            // IS_AUTOINCREMENT
-            row.add("");
-            // IS_GENERATEDCOLUMN
-            row.add("");
+
+            row.add(null); // SQL_DATA_TYPE
+            row.add(null); // SQL_DATETIME_SUB
+            row.add(null); // CHAR_OCTET_LENGTH
+            row.add(i + 1); // ORDINAL_POSITION
+            row.add(column.getInt("notnull") == 0 ? "YES" : "NO"); // IS_NULLABLE
+            row.add(null); // SCOPE_CATLOG
+            row.add(null); // SCOPE_SCHEMA
+            row.add(null); // SCOPE_TABLE
+            row.add(null); // SOURCE_DATA_TYPE
+            row.add(""); // IS_AUTOINCREMENT
+            row.add(""); // IS_GENERATEDCOLUMN
 
             rows.add(row);
         }
 
-        JSONObject stringType = new JSONObject();
-        stringType.put("type", "TEXT");
-        JSONObject intType = new JSONObject();
-        intType.put("type", "INTEGER");
+        JSONObject str = new JSONObject().put("type", "TEXT");
+        JSONObject num = new JSONObject().put("type", "INTEGER");
+        List<JSONObject> columnSchema = new ArrayList<>();
+        for (int i = 0; i < 24; i++) {
+            // columns 4 (DATA_TYPE), 10 (NULLABLE), 6-9 (sizes), 13-16 (SQL_ fields), 21 (SOURCE_DATA_TYPE) are integers
+            boolean isInt = (i == 4 || i == 10 || (i >= 6 && i <= 9) || (i >= 13 && i <= 16) || i == 21);
+            columnSchema.add(isInt ? num : str);
+        }
 
-        JSONArray columnSchema = new JSONArray();
-        // TABLE_CAT
-        columnSchema.put(stringType);
-        // TABLE_SCHEM
-        columnSchema.put(stringType);
-        // TABLE_NAME
-        columnSchema.put(stringType);
-        // COLUMN_NAME
-        columnSchema.put(stringType);
-        // DATA_TYPE
-        columnSchema.put(intType);
-        // TYPE_NAME
-        columnSchema.put(stringType);
-        // COLUMN_SIZE
-        columnSchema.put(intType);
-        // BUFFER_LENGTH
-        columnSchema.put(intType);
-        // DECIMAL_DIGITS
-        columnSchema.put(intType);
-        // NUM_PREC_RADIX
-        columnSchema.put(intType);
-        // NULLABLE
-        columnSchema.put(intType);
-        // REMARKS
-        columnSchema.put(stringType);
-        // COLUMN_DEF
-        columnSchema.put(stringType);
-        // SQL_DATA_TYPE
-        columnSchema.put(intType);
-        // SQL_DATETIME_SUB
-        columnSchema.put(intType);
-        // CHAR_OCTET_LENGTH
-        columnSchema.put(intType);
-        // ORDINAL_POSITION
-        columnSchema.put(intType);
-        // IS_NULLABLE
-        columnSchema.put(stringType);
-        // SCOPE_CATLOG
-        columnSchema.put(stringType);
-        // SCOPE_SCHEMA
-        columnSchema.put(stringType);
-        // SCOPE_TABLE
-        columnSchema.put(stringType);
-        // SOURCE_DATA_TYPE
-        columnSchema.put(intType);
-        // IS_AUTOINCREMENT
-        columnSchema.put(stringType);
-        // IS_GENERATEDCOLUMN
-        columnSchema.put(stringType);
-
-        return new D1ResultSet(ApiKey, AccountId, DatabaseUuid, columnNames, rows, columnSchema);
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, columnNames, columnSchema);
     }
 
     @Override
@@ -904,10 +824,10 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public ResultSet getPrimaryKeys(String catalog, String schema, String table) throws SQLException {
-        JSONObject results = queryDatabase("PRAGMA table_info(" + table + ")");
+        String quotedTable = "\"" + table.replace("\"", "\"\"") + "\"";
+        JSONObject results = queryDatabase("PRAGMA table_info(" + quotedTable + ")", null);
         JSONArray columns = results.getJSONArray("results");
 
-        // Find the column labelled PrimaryKey.
         JSONObject primaryKeyColumn = null;
         for (int i = 0; i < columns.length(); i++) {
             JSONObject column = columns.getJSONObject(i);
@@ -917,11 +837,11 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
             }
         }
 
-        if(primaryKeyColumn == null) {
+        if (primaryKeyColumn == null) {
             return null;
         }
 
-        ArrayList<String> columnNames = new ArrayList<>();
+        List<String> columnNames = new ArrayList<>();
         columnNames.add("TABLE_CAT");
         columnNames.add("TABLE_SCHEM");
         columnNames.add("TABLE_NAME");
@@ -929,36 +849,27 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
         columnNames.add("KEY_SEQ");
         columnNames.add("PK_NAME");
 
-        ArrayList<ArrayList<Object>> rows = new ArrayList<>();
-        ArrayList<Object> row = new ArrayList<>();
+        List<Object> row = new ArrayList<>();
         row.add(null);
         row.add(null);
         row.add(table);
         row.add(primaryKeyColumn.getString("name"));
         row.add(1);
         row.add(primaryKeyColumn.getString("name"));
+        List<List<Object>> rows = new ArrayList<>();
         rows.add(row);
 
-        JSONObject stringType = new JSONObject();
-        stringType.put("type", "TEXT");
-        JSONObject intType = new JSONObject();
-        intType.put("type", "INTEGER");
+        JSONObject str = new JSONObject().put("type", "TEXT");
+        JSONObject num = new JSONObject().put("type", "INTEGER");
+        List<JSONObject> columnSchema = new ArrayList<>();
+        columnSchema.add(str); // TABLE_CAT
+        columnSchema.add(str); // TABLE_SCHEM
+        columnSchema.add(str); // TABLE_NAME
+        columnSchema.add(str); // COLUMN_NAME
+        columnSchema.add(num); // KEY_SEQ
+        columnSchema.add(str); // PK_NAME
 
-        JSONArray columnSchema = new JSONArray();
-        // TABLE_CAT
-        columnSchema.put(stringType);
-        // TABLE_SCHEM
-        columnSchema.put(stringType);
-        // TABLE_NAME
-        columnSchema.put(stringType);
-        // COLUMN_NAME
-        columnSchema.put(stringType);
-        // KEY_SEQ
-        columnSchema.put(intType);
-        // PK_NAME
-        columnSchema.put(stringType);
-
-        return new D1ResultSet(ApiKey, AccountId, DatabaseUuid, columnNames, rows, columnSchema);
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, columnNames, columnSchema);
     }
 
     @Override
@@ -973,7 +884,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public ResultSet getCrossReference(String parentCatalog, String parentSchema, String parentTable, String foreignCatalog, String foreignSchema, String foreignTable) throws SQLException {
-        ArrayList<String> columnNames = new ArrayList<>();
+        List<String> columnNames = new ArrayList<>();
         columnNames.add("PKTABLE_CAT");
         columnNames.add("PKTABLE_SCHEM");
         columnNames.add("PKTABLE_NAME");
@@ -988,54 +899,38 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
         columnNames.add("FK_NAME");
         columnNames.add("PK_NAME");
 
-        JSONObject stringType = new JSONObject();
-        stringType.put("type", "TEXT");
-        JSONObject intType = new JSONObject();
-        intType.put("type", "INTEGER");
+        JSONObject str = new JSONObject().put("type", "TEXT");
+        JSONObject num = new JSONObject().put("type", "INTEGER");
+        List<JSONObject> columnSchema = new ArrayList<>();
+        columnSchema.add(str); // PKTABLE_CAT
+        columnSchema.add(str); // PKTABLE_SCHEM
+        columnSchema.add(str); // PKTABLE_NAME
+        columnSchema.add(str); // PKCOLUMN_NAME
+        columnSchema.add(str); // FKTABLE_CAT
+        columnSchema.add(str); // FKTABLE_SCHEM
+        columnSchema.add(str); // FKTABLE_NAME
+        columnSchema.add(str); // FKCOLUMN_NAME
+        columnSchema.add(num); // KEY_SEQ
+        columnSchema.add(num); // UPDATE_RULE
+        columnSchema.add(num); // DELETE_RULE
+        columnSchema.add(str); // FK_NAME
+        columnSchema.add(str); // PK_NAME
 
-        JSONArray columnSchema = new JSONArray();
-        // PKTABLE_CAT
-        columnSchema.put(stringType);
-        // PKTABLE_SCHEM
-        columnSchema.put(stringType);
-        // PKTABLE_NAME
-        columnSchema.put(stringType);
-        // PKCOLUMN_NAME
-        columnSchema.put(stringType);
-        // FKTABLE_CAT
-        columnSchema.put(stringType);
-        // FKTABLE_SCHEM
-        columnSchema.put(stringType);
-        // FKTABLE_NAME
-        columnSchema.put(stringType);
-        // FKCOLUMN_NAME
-        columnSchema.put(stringType);
-        // KEY_SEQ
-        columnSchema.put(intType);
-        // UPDATE_RULE
-        columnSchema.put(intType);
-        // DELETE_RULE
-        columnSchema.put(intType);
-        // FK_NAME
-        columnSchema.put(stringType);
-        // PK_NAME
-        columnSchema.put(stringType);
+        JSONObject ruleMap = new JSONObject();
+        ruleMap.put("NO ACTION", DatabaseMetaData.importedKeyNoAction);
+        ruleMap.put("CASCADE", DatabaseMetaData.importedKeyCascade);
+        ruleMap.put("SET NULL", DatabaseMetaData.importedKeySetNull);
+        ruleMap.put("SET DEFAULT", DatabaseMetaData.importedKeySetDefault);
+        ruleMap.put("RESTRICT", DatabaseMetaData.importedKeyRestrict);
 
-        JSONObject ruleType = new JSONObject();
-        ruleType.put("NO ACTION", DatabaseMetaData.importedKeyNoAction);
-        ruleType.put("CASCADE", DatabaseMetaData.importedKeyCascade);
-        ruleType.put("SET NULL", DatabaseMetaData.importedKeySetNull);
-        ruleType.put("SET DEFAULT", DatabaseMetaData.importedKeySetDefault);
-        ruleType.put("RESTRICT", DatabaseMetaData.importedKeyRestrict);
-
-        JSONObject results = queryDatabase("PRAGMA foreign_key_list(" + foreignTable + ")");
+        String quotedFk = "\"" + foreignTable.replace("\"", "\"\"") + "\"";
+        JSONObject results = queryDatabase("PRAGMA foreign_key_list(" + quotedFk + ")", null);
         JSONArray fkList = results.getJSONArray("results");
-        ArrayList<ArrayList<Object>> rows = new ArrayList<>();
+        List<List<Object>> rows = new ArrayList<>();
 
         for (int i = 0; i < fkList.length(); i++) {
             JSONObject fkItem = fkList.getJSONObject(i);
-
-            ArrayList<Object> row = new ArrayList<>();
+            List<Object> row = new ArrayList<>();
             row.add(null);
             row.add(null);
             row.add(fkItem.get("table"));
@@ -1045,17 +940,14 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
             row.add(foreignTable);
             row.add(fkItem.get("from"));
             row.add(fkItem.get("seq"));
-            row.add(ruleType.get(fkItem.get("on_update").toString()));
-            row.add(ruleType.get(fkItem.get("on_delete").toString()));
-
-            // If null is set, #FAKE_<table>_<number> is set, so <foreignTable>_<id>_<seq> set
-            row.add(foreignTable + "_" + fkItem.get("id").toString() + "_" + fkItem.get("seq").toString());
+            row.add(ruleMap.get(fkItem.get("on_update").toString()));
+            row.add(ruleMap.get(fkItem.get("on_delete").toString()));
+            row.add(foreignTable + "_" + fkItem.get("id") + "_" + fkItem.get("seq"));
             row.add(null);
-
             rows.add(row);
         }
 
-        return new D1ResultSet(ApiKey, AccountId, DatabaseUuid, columnNames, rows, columnSchema);
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, columnNames, columnSchema);
     }
 
     @Override
@@ -1125,7 +1017,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public boolean supportsBatchUpdates() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -1135,7 +1027,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public Connection getConnection() throws SQLException {
-        return null;
+        return parentConnection;
     }
 
     @Override
@@ -1155,7 +1047,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public boolean supportsGetGeneratedKeys() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -1195,12 +1087,12 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public int getJDBCMajorVersion() throws SQLException {
-        return 0;
+        return 4;
     }
 
     @Override
     public int getJDBCMinorVersion() throws SQLException {
-        return 0;
+        return 2;
     }
 
     @Override

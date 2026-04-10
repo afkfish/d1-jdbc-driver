@@ -1,7 +1,6 @@
 package org.isaacmcfadyen;
 
 import org.json.JSONObject;
-import org.json.JSONArray;
 
 import java.io.InputStream;
 import java.io.Reader;
@@ -10,28 +9,45 @@ import java.net.URL;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
     private boolean closed = false;
-    private final ArrayList<String> columnNames = new ArrayList<>();
-    private final ArrayList<ArrayList<Object>> rows = new ArrayList<>();
+    private final List<String> columnNames = new ArrayList<>();
+    /** Maps lower-cased column label to its 0-based index for O(1) lookup. */
+    private final Map<String, Integer> columnIndex = new HashMap<>();
+    private final List<List<Object>> rows = new ArrayList<>();
     private int currentRow = 0;
+    private String tableName = null;
+    private boolean lastWasNull = false;
 
-    private final JSONArray columnSchema;
+    private final List<JSONObject> columnSchema;
 
     D1ResultSet(
-            String ApiKey,
-            String AccountId,
-            String DatabaseUuid,
-            ArrayList<String> columnNames,
-            ArrayList<ArrayList<Object>> rows,
-            JSONArray columnSchema
+            String apiToken,
+            String accountId,
+            String databaseId,
+            List<List<Object>> rows,
+            List<String> columnNames,
+            List<JSONObject> columnSchema
     ) {
-        super(ApiKey, AccountId, DatabaseUuid);
+        super(apiToken, accountId, databaseId);
         this.columnNames.addAll(columnNames);
+        for (int i = 0; i < columnNames.size(); i++) {
+            columnIndex.put(columnNames.get(i).toLowerCase(), i);
+        }
         this.rows.addAll(rows);
-        this.columnSchema = columnSchema;
+        this.columnSchema = new ArrayList<>(columnSchema);
+    }
+
+    void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
+
+    int getRowCount() {
+        return rows.size();
     }
 
     @Override
@@ -52,21 +68,39 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public boolean wasNull() throws SQLException {
-        return false;
+        return lastWasNull;
+    }
+
+    /** Resolve a column label to its 1-based index in O(1) time. */
+    private int indexFor(String columnLabel) throws SQLException {
+        Integer idx = columnIndex.get(columnLabel.toLowerCase());
+        if (idx == null) {
+            throw new SQLException("Column not found: " + columnLabel);
+        }
+        return idx + 1;
+    }
+
+    /** Read a raw cell value and update lastWasNull. Returns null when NULL. */
+    private Object raw(int columnIndex) {
+        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
+        lastWasNull = (val == null || JSONObject.NULL.equals(val));
+        return lastWasNull ? null : val;
     }
 
     @Override
     public String getString(int columnIndex) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnIndex - 1))) {
-            return (String) rows.get(currentRow - 1).get(columnIndex - 1);
-        } else {
-            return null;
-        }
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
+        return val.toString();
     }
 
     @Override
     public boolean getBoolean(int columnIndex) throws SQLException {
-        throw new SQLException("Not implemented: getBoolean(int columnIndex)");
+        Object val = raw(columnIndex);
+        if (lastWasNull) return false;
+        if (val instanceof Boolean) return (Boolean) val;
+        if (val instanceof Number) return ((Number) val).intValue() != 0;
+        return Boolean.parseBoolean(val.toString());
     }
 
     @Override
@@ -81,35 +115,41 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public int getInt(int columnIndex) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnIndex - 1))) {
-            return (int) rows.get(currentRow - 1).get(columnIndex - 1);
-        } else {
-            return 0;
-        }
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0;
+        if (val instanceof Number) return ((Number) val).intValue();
+        return Integer.parseInt(val.toString());
     }
 
     @Override
     public long getLong(int columnIndex) throws SQLException {
-        throw new SQLException("Not implemented: getLong(int columnIndex)");
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0L;
+        if (val instanceof Number) return ((Number) val).longValue();
+        return Long.parseLong(val.toString());
     }
 
     @Override
     public float getFloat(int columnIndex) throws SQLException {
-        throw new SQLException("Not implemented: getFloat(int columnIndex)");
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0f;
+        if (val instanceof Number) return ((Number) val).floatValue();
+        return Float.parseFloat(val.toString());
     }
 
     @Override
     public double getDouble(int columnIndex) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnIndex - 1))) {
-            return (double) rows.get(currentRow - 1).get(columnIndex - 1);
-        } else {
-            return 0;
-        }
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0.0;
+        if (val instanceof Number) return ((Number) val).doubleValue();
+        return Double.parseDouble(val.toString());
     }
 
     @Override
     public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException {
-        throw new SQLException("Not implemented: getBigDecimal(int columnIndex, int scale)");
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
+        return new BigDecimal(val.toString()).setScale(scale, java.math.RoundingMode.HALF_UP);
     }
 
     @Override
@@ -119,7 +159,9 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Date getDate(int columnIndex) throws SQLException {
-        throw new SQLException("Not implemented: getDate(int columnIndex)");
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
+        return Date.valueOf(val.toString());
     }
 
     @Override
@@ -129,7 +171,9 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Timestamp getTimestamp(int columnIndex) throws SQLException {
-        throw new SQLException("Not implemented: getTimestamp(int columnIndex)");
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
+        return Timestamp.valueOf(val.toString());
     }
 
     @Override
@@ -149,16 +193,12 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public String getString(String columnLabel) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel)))) {
-            return (String) rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel));
-        } else {
-            return null;
-        }
+        return getString(indexFor(columnLabel));
     }
 
     @Override
     public boolean getBoolean(String columnLabel) throws SQLException {
-        throw new SQLException("Not implemented: getBoolean(String columnLabel)");
+        return getBoolean(indexFor(columnLabel));
     }
 
     @Override
@@ -173,35 +213,27 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public int getInt(String columnLabel) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel)))) {
-            return (int) rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel));
-        } else {
-            return 0;
-        }
+        return getInt(indexFor(columnLabel));
     }
 
     @Override
     public long getLong(String columnLabel) throws SQLException {
-        throw new SQLException("Not implemented: getLong(String columnLabel)");
+        return getLong(indexFor(columnLabel));
     }
 
     @Override
     public float getFloat(String columnLabel) throws SQLException {
-        throw new SQLException("Not implemented: getFloat(String columnLabel)");
+        return getFloat(indexFor(columnLabel));
     }
 
     @Override
     public double getDouble(String columnLabel) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel)))) {
-            return (double) rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel));
-        } else {
-            return 0;
-        }
+        return getDouble(indexFor(columnLabel));
     }
 
     @Override
     public BigDecimal getBigDecimal(String columnLabel, int scale) throws SQLException {
-        throw new SQLException("Not implemented: getBigDecimal(String columnLabel, int scale)");
+        return getBigDecimal(indexFor(columnLabel), scale);
     }
 
     @Override
@@ -211,7 +243,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Date getDate(String columnLabel) throws SQLException {
-        throw new SQLException("Not implemented: getDate(String columnLabel)");
+        return getDate(indexFor(columnLabel));
     }
 
     @Override
@@ -221,7 +253,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Timestamp getTimestamp(String columnLabel) throws SQLException {
-        throw new SQLException("Not implemented: getTimestamp(String columnLabel)");
+        return getTimestamp(indexFor(columnLabel));
     }
 
     @Override
@@ -256,24 +288,22 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public ResultSetMetaData getMetaData() throws SQLException {
-        return new D1ResultSetMetaData(ApiKey, AccountId, DatabaseUuid, columnNames, rows, columnSchema);
+        return new D1ResultSetMetaData(apiToken, accountId, databaseId, columnNames, rows, columnSchema);
     }
 
     @Override
     public Object getObject(int columnIndex) throws SQLException {
-        ArrayList<Object> row = rows.get(currentRow - 1);
-        return row.get(columnIndex - 1);
+        return raw(columnIndex);
     }
 
     @Override
     public Object getObject(String columnLabel) throws SQLException {
-        ArrayList<Object> row = rows.get(currentRow - 1);
-        return row.get(columnNames.indexOf(columnLabel));
+        return getObject(indexFor(columnLabel));
     }
 
     @Override
     public int findColumn(String columnLabel) throws SQLException {
-        return columnNames.indexOf(columnLabel) + 1;
+        return indexFor(columnLabel);
     }
 
     @Override
@@ -288,12 +318,14 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public BigDecimal getBigDecimal(int columnIndex) throws SQLException {
-        throw new SQLException("Not implemented: getBigDecimal(int columnIndex)");
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
+        return new BigDecimal(val.toString());
     }
 
     @Override
     public BigDecimal getBigDecimal(String columnLabel) throws SQLException {
-        throw new SQLException("Not implemented: getBigDecimal(String columnLabel)");
+        return getBigDecimal(indexFor(columnLabel));
     }
 
     @Override
@@ -388,7 +420,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public void setFetchSize(int rows) throws SQLException {
-        throw new SQLException("Not implemented: setFetchSize(int rows)");
+        // no-op
     }
 
     @Override
