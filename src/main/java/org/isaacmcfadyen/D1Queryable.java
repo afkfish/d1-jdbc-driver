@@ -341,11 +341,10 @@ public abstract class D1Queryable {
     }
 
     private JSONObject executeHttpQuery(String sql, JSONArray params) throws SQLException {
-        HttpURLConnection connection = null;
         try {
             URL url = new URL("https://api.cloudflare.com/client/v4/accounts/"
                     + accountId + "/d1/database/" + databaseId + "/query");
-            connection = (HttpURLConnection) url.openConnection();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Authorization", "Bearer " + apiToken);
             connection.setRequestProperty("Content-Type", "application/json");
@@ -424,10 +423,9 @@ public abstract class D1Queryable {
             throw e;
         } catch (Exception e) {
             throw new SQLException(e.getMessage(), e);
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
         }
+        // Intentionally NOT calling connection.disconnect() so the JVM's
+        // built-in HTTP keep-alive pool can reuse the underlying TCP socket
+        // for subsequent requests to the same Cloudflare endpoint.
     }
 }
