@@ -9,12 +9,15 @@ import java.net.URL;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
     private boolean closed = false;
     private final List<String> columnNames = new ArrayList<>();
+    /** Maps lower-cased column label to its 0-based index for O(1) lookup. */
+    private final Map<String, Integer> columnIndex = new HashMap<>();
     private final List<List<Object>> rows = new ArrayList<>();
     private int currentRow = 0;
     private String tableName = null;
@@ -32,6 +35,9 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
     ) {
         super(apiToken, accountId, databaseId);
         this.columnNames.addAll(columnNames);
+        for (int i = 0; i < columnNames.size(); i++) {
+            columnIndex.put(columnNames.get(i).toLowerCase(), i);
+        }
         this.rows.addAll(rows);
         this.columnSchema = new ArrayList<>(columnSchema);
     }
@@ -63,6 +69,15 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
     @Override
     public boolean wasNull() throws SQLException {
         return lastWasNull;
+    }
+
+    /** Resolve a column label to its 1-based index in O(1) time. */
+    private int indexFor(String columnLabel) throws SQLException {
+        Integer idx = columnIndex.get(columnLabel.toLowerCase());
+        if (idx == null) {
+            throw new SQLException("Column not found: " + columnLabel);
+        }
+        return idx + 1;
     }
 
     /** Read a raw cell value and update lastWasNull. Returns null when NULL. */
@@ -178,12 +193,12 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public String getString(String columnLabel) throws SQLException {
-        return getString(columnNames.indexOf(columnLabel) + 1);
+        return getString(indexFor(columnLabel));
     }
 
     @Override
     public boolean getBoolean(String columnLabel) throws SQLException {
-        return getBoolean(columnNames.indexOf(columnLabel) + 1);
+        return getBoolean(indexFor(columnLabel));
     }
 
     @Override
@@ -198,27 +213,27 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public int getInt(String columnLabel) throws SQLException {
-        return getInt(columnNames.indexOf(columnLabel) + 1);
+        return getInt(indexFor(columnLabel));
     }
 
     @Override
     public long getLong(String columnLabel) throws SQLException {
-        return getLong(columnNames.indexOf(columnLabel) + 1);
+        return getLong(indexFor(columnLabel));
     }
 
     @Override
     public float getFloat(String columnLabel) throws SQLException {
-        return getFloat(columnNames.indexOf(columnLabel) + 1);
+        return getFloat(indexFor(columnLabel));
     }
 
     @Override
     public double getDouble(String columnLabel) throws SQLException {
-        return getDouble(columnNames.indexOf(columnLabel) + 1);
+        return getDouble(indexFor(columnLabel));
     }
 
     @Override
     public BigDecimal getBigDecimal(String columnLabel, int scale) throws SQLException {
-        return getBigDecimal(columnNames.indexOf(columnLabel) + 1, scale);
+        return getBigDecimal(indexFor(columnLabel), scale);
     }
 
     @Override
@@ -228,7 +243,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Date getDate(String columnLabel) throws SQLException {
-        return getDate(columnNames.indexOf(columnLabel) + 1);
+        return getDate(indexFor(columnLabel));
     }
 
     @Override
@@ -238,7 +253,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Timestamp getTimestamp(String columnLabel) throws SQLException {
-        return getTimestamp(columnNames.indexOf(columnLabel) + 1);
+        return getTimestamp(indexFor(columnLabel));
     }
 
     @Override
@@ -283,12 +298,12 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Object getObject(String columnLabel) throws SQLException {
-        return getObject(columnNames.indexOf(columnLabel) + 1);
+        return getObject(indexFor(columnLabel));
     }
 
     @Override
     public int findColumn(String columnLabel) throws SQLException {
-        return columnNames.indexOf(columnLabel) + 1;
+        return indexFor(columnLabel);
     }
 
     @Override
@@ -310,7 +325,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public BigDecimal getBigDecimal(String columnLabel) throws SQLException {
-        return getBigDecimal(columnNames.indexOf(columnLabel) + 1);
+        return getBigDecimal(indexFor(columnLabel));
     }
 
     @Override
