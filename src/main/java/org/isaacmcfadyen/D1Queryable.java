@@ -139,6 +139,43 @@ public abstract class D1Queryable {
     }
 
     // ---------------------------------------------------------------------------
+    // Internal table filtering
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Returns true for Cloudflare-internal and SQLite-system tables that should
+     * never be surfaced to schema browsers.
+     */
+    static boolean isInternalTable(String name) {
+        if (name == null) return false;
+        if (name.startsWith("_cf_")) return true;
+        // SQLite system tables
+        return name.equals("sqlite_master")
+                || name.equals("sqlite_schema")
+                || name.equals("sqlite_sequence")
+                || name.equals("sqlite_stat1")
+                || name.equals("sqlite_stat2")
+                || name.equals("sqlite_stat3")
+                || name.equals("sqlite_stat4");
+    }
+
+    /**
+     * Strip internal/system tables from a {@code PRAGMA table_list} result so
+     * that schema browsers (e.g. DataGrip) never try to introspect them.
+     */
+    private JSONObject filterTableList(JSONObject result) {
+        JSONArray original = result.getJSONArray("results");
+        JSONArray filtered = new JSONArray();
+        for (int i = 0; i < original.length(); i++) {
+            JSONObject row = original.getJSONObject(i);
+            if (!isInternalTable(row.optString("name"))) {
+                filtered.put(row);
+            }
+        }
+        return new JSONObject(result.toMap()).put("results", filtered);
+    }
+
+    // ---------------------------------------------------------------------------
     // PRAGMA mocking
     // ---------------------------------------------------------------------------
 
@@ -246,7 +283,17 @@ public abstract class D1Queryable {
                 throw new SQLException("Query failed");
             }
 
-            return json.getJSONArray("result").getJSONObject(0);
+            JSONObject resultObj = json.getJSONArray("result").getJSONObject(0);
+
+            // Strip internal/system tables from PRAGMA table_list results so
+            // that schema browsers never discover or attempt to introspect them.
+            String trimmedLower = sql.trim().toLowerCase();
+            if (trimmedLower.equals("pragma table_list")
+                    || trimmedLower.matches("pragma\\s+\"?\\w+\"?\\.table_list")) {
+                resultObj = filterTableList(resultObj);
+            }
+
+            return resultObj;
 
         } catch (SQLException e) {
             throw e;

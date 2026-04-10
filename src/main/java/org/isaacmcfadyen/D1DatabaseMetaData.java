@@ -632,8 +632,8 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
             JSONObject table = tables.getJSONObject(i);
             String tableName = table.getString("name");
 
-            // Hide internal Cloudflare KV table from table browsers.
-            if (tableName.equals("_cf_KV")) continue;
+            // Hide Cloudflare-internal and SQLite system tables from table browsers.
+            if (D1Queryable.isInternalTable(tableName)) continue;
 
             List<Object> row = new ArrayList<>();
             row.add(null);
