@@ -271,6 +271,17 @@ public abstract class D1Queryable {
     // HTTP query
     // ---------------------------------------------------------------------------
 
+    /**
+     * Returns true if {@code sql} is a read-only statement (SELECT, EXPLAIN,
+     * or a WITH … SELECT CTE). These may be safely retried on transient errors.
+     */
+    private static boolean isReadOnly(String sql) {
+        String trimmed = sql.trim().toLowerCase();
+        return trimmed.startsWith("select")
+                || trimmed.startsWith("explain")
+                || trimmed.startsWith("with");
+    }
+
     protected JSONObject queryDatabase(String sql, JSONArray params) throws SQLException {
         // Short-circuit for mocked PRAGMA commands.
         JSONObject mocked = preProcessQuery(sql);
@@ -278,6 +289,37 @@ public abstract class D1Queryable {
             return mocked;
         }
 
+        boolean readOnly = isReadOnly(sql);
+        // Up to 2 retries for read-only queries; 1 attempt total for writes.
+        int maxAttempts = readOnly ? 3 : 1;
+        int delayMs = 500;
+
+        SQLException lastException = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return executeHttpQuery(sql, params);
+            } catch (SQLException e) {
+                lastException = e;
+                String msg = e.getMessage();
+                // Retry on 429 (rate-limit) and transient 5xx for read-only queries.
+                boolean retryable = readOnly
+                        && (msg != null && (msg.startsWith("HTTP 429") || msg.startsWith("HTTP 5")));
+                if (!retryable || attempt == maxAttempts) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new SQLException("Interrupted during retry", ie);
+                }
+                delayMs *= 2; // exponential back-off
+            }
+        }
+        throw lastException; // unreachable but satisfies compiler
+    }
+
+    private JSONObject executeHttpQuery(String sql, JSONArray params) throws SQLException {
         HttpURLConnection connection = null;
         try {
             URL url = new URL("https://api.cloudflare.com/client/v4/accounts/"
