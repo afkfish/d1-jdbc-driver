@@ -3,6 +3,9 @@ package org.isaacmcfadyen;
 import org.json.JSONObject;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class D1Statement extends D1Queryable implements Statement {
     private boolean closed = false;
@@ -24,7 +27,7 @@ public class D1Statement extends D1Queryable implements Statement {
     @Override
     public int executeUpdate(String sql) throws SQLException {
         queryDatabase(sql, null);
-        return 1;
+        return Math.max(0, lastUpdateCount);
     }
 
     @Override
@@ -100,7 +103,7 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public int getUpdateCount() throws SQLException {
-        return -1;
+        return lastUpdateCount;
     }
 
     @Override
@@ -163,7 +166,16 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public ResultSet getGeneratedKeys() throws SQLException {
-        return null;
+        List<String> cols = Collections.singletonList("last_insert_rowid()");
+        List<org.json.JSONObject> schema = Collections.singletonList(
+                new org.json.JSONObject().put("type", "INTEGER"));
+        List<List<Object>> rows = new ArrayList<>();
+        if (lastInsertId > 0) {
+            List<Object> row = new ArrayList<>();
+            row.add(lastInsertId);
+            rows.add(row);
+        }
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, cols, schema);
     }
 
     @Override
@@ -178,7 +190,7 @@ public class D1Statement extends D1Queryable implements Statement {
 
     @Override
     public int executeUpdate(String sql, String[] columnNames) throws SQLException {
-        return executeUpdate(sql);
+        return executeUpdate(sql);  // NOSONAR
     }
 
     @Override

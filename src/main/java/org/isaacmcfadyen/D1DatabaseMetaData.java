@@ -1044,7 +1044,7 @@ public class D1DatabaseMetaData extends D1Queryable implements DatabaseMetaData 
 
     @Override
     public boolean supportsGetGeneratedKeys() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override

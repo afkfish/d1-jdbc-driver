@@ -37,6 +37,11 @@ public abstract class D1Queryable {
     protected String databaseId;
     protected String apiToken;
 
+    /** Rows affected by the last DML statement (-1 if not a DML). */
+    protected int lastUpdateCount = -1;
+    /** Last row ID inserted (0 if not an INSERT or no row was inserted). */
+    protected long lastInsertId = 0;
+
     // ---------------------------------------------------------------------------
     // Result-set construction helpers
     // ---------------------------------------------------------------------------
@@ -333,6 +338,13 @@ public abstract class D1Queryable {
             }
 
             JSONObject resultObj = json.getJSONArray("result").getJSONObject(0);
+
+            // Capture DML meta: rows changed and last inserted row ID.
+            JSONObject meta = resultObj.optJSONObject("meta");
+            if (meta != null) {
+                lastUpdateCount = meta.optInt("changes", -1);
+                lastInsertId = meta.optLong("last_row_id", 0);
+            }
 
             // Strip internal/system tables from PRAGMA table_list results so
             // that schema browsers never discover or attempt to introspect them.

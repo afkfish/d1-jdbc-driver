@@ -8,7 +8,10 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.net.URL;
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.List;
 
 public class D1PreparedStatement extends D1Queryable implements PreparedStatement {
     private final String sql;
@@ -34,7 +37,7 @@ public class D1PreparedStatement extends D1Queryable implements PreparedStatemen
     @Override
     public int executeUpdate() throws SQLException {
         queryDatabase(sql, params);
-        return 1;
+        return Math.max(0, lastUpdateCount);
     }
 
     @Override
@@ -51,7 +54,7 @@ public class D1PreparedStatement extends D1Queryable implements PreparedStatemen
 
     @Override
     public int getUpdateCount() throws SQLException {
-        return 0;
+        return lastUpdateCount;
     }
 
     // ---------------------------------------------------------------------------
@@ -289,7 +292,18 @@ public class D1PreparedStatement extends D1Queryable implements PreparedStatemen
     @Override public int[] executeBatch() throws SQLException { return new int[0]; }
     @Override public Connection getConnection() throws SQLException { return null; }
     @Override public boolean getMoreResults(int current) throws SQLException { return false; }
-    @Override public ResultSet getGeneratedKeys() throws SQLException { return null; }
+    @Override
+    public ResultSet getGeneratedKeys() throws SQLException {
+        List<String> cols = Collections.singletonList("last_insert_rowid()");
+        List<JSONObject> schema = Collections.singletonList(new JSONObject().put("type", "INTEGER"));
+        List<List<Object>> rows = new ArrayList<>();
+        if (lastInsertId > 0) {
+            List<Object> row = new ArrayList<>();
+            row.add(lastInsertId);
+            rows.add(row);
+        }
+        return new D1ResultSet(apiToken, accountId, databaseId, rows, cols, schema);
+    }
     @Override public int getResultSetHoldability() throws SQLException { return 0; }
     @Override public boolean isClosed() throws SQLException { return false; }
     @Override public void setPoolable(boolean poolable) throws SQLException { }
