@@ -210,6 +210,54 @@ public abstract class D1Queryable {
                             .put(new JSONObject().put("seq", 4).put("name", "BINARY")));
         }
 
+        // D1 only exposes a curated subset of SQLite PRAGMAs (see
+        // https://developers.cloudflare.com/d1/sql-api/sql-statements/).
+        // The ones below are not in that list; we return sensible static
+        // responses so that JDBC clients don't receive unexpected errors.
+
+        if (lower.equals("pragma encoding")) {
+            return new JSONObject().put("results",
+                    new JSONArray().put(new JSONObject().put("encoding", "UTF-8")));
+        }
+
+        if (lower.equals("pragma journal_mode") || lower.equals("pragma main.journal_mode")) {
+            // D1 manages its own write-ahead log; surface "wal" to clients.
+            return new JSONObject().put("results",
+                    new JSONArray().put(new JSONObject().put("journal_mode", "wal")));
+        }
+
+        if (lower.equals("pragma page_size") || lower.equals("pragma main.page_size")) {
+            return new JSONObject().put("results",
+                    new JSONArray().put(new JSONObject().put("page_size", 4096)));
+        }
+
+        if (lower.equals("pragma integrity_check") || lower.equals("pragma main.integrity_check")) {
+            // D1 exposes quick_check but not integrity_check; return "ok" so
+            // tools that send this pragma don't see an error.
+            return new JSONObject().put("results",
+                    new JSONArray().put(new JSONObject().put("integrity_check", "ok")));
+        }
+
+        if (lower.equals("pragma user_version") || lower.equals("pragma main.user_version")) {
+            return new JSONObject().put("results",
+                    new JSONArray().put(new JSONObject().put("user_version", 0)));
+        }
+
+        if (lower.equals("pragma schema_version") || lower.equals("pragma main.schema_version")) {
+            return new JSONObject().put("results",
+                    new JSONArray().put(new JSONObject().put("schema_version", 0)));
+        }
+
+        if (lower.equals("pragma freelist_count") || lower.equals("pragma main.freelist_count")) {
+            return new JSONObject().put("results",
+                    new JSONArray().put(new JSONObject().put("freelist_count", 0)));
+        }
+
+        if (lower.equals("pragma compile_options")) {
+            // Return an empty list; D1's compile options are not user-visible.
+            return new JSONObject().put("results", new JSONArray());
+        }
+
         return null;
     }
 
