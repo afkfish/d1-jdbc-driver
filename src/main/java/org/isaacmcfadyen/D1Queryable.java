@@ -14,7 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 class TableNameFinderNoSchema extends TablesNamesFinder {
@@ -41,6 +43,13 @@ public abstract class D1Queryable {
     protected int lastUpdateCount = -1;
     /** Last row ID inserted (0 if not an INSERT or no row was inserted). */
     protected long lastInsertId = 0;
+
+    /**
+     * Per-connection cache of PRAGMA table_info results keyed by table name.
+     * Avoids the extra round-trip that generateResultSet() previously made for
+     * every SELECT query.
+     */
+    private final Map<String, JSONArray> tableSchemaCache = new HashMap<>();
 
     // ---------------------------------------------------------------------------
     // Result-set construction helpers
@@ -103,12 +112,17 @@ public abstract class D1Queryable {
                     .getTableList(net.sf.jsqlparser.parser.CCJSqlParserUtil.parse(query))
                     .get(0);
 
-            // Fetch column schema from PRAGMA table_info.
-            JSONObject columnSchemaQuery = queryDatabase(
-                    "PRAGMA table_info(" + tableName + ")",
-                    null
-            );
-            JSONArray columnSchemaArray = columnSchemaQuery.getJSONArray("results");
+            // Fetch column schema from PRAGMA table_info (cached per table).
+            JSONArray columnSchemaArray = tableSchemaCache.get(tableName);
+            if (columnSchemaArray == null) {
+                String quotedTable = "\"" + tableName.replace("\"", "\"\"") + "\"";
+                JSONObject columnSchemaQuery = queryDatabase(
+                        "PRAGMA table_info(" + quotedTable + ")",
+                        null
+                );
+                columnSchemaArray = columnSchemaQuery.getJSONArray("results");
+                tableSchemaCache.put(tableName, columnSchemaArray);
+            }
 
             List<String> columnNames = new ArrayList<>();
             List<JSONObject> columnSchema = new ArrayList<>();
@@ -287,6 +301,13 @@ public abstract class D1Queryable {
         JSONObject mocked = preProcessQuery(sql);
         if (mocked != null) {
             return mocked;
+        }
+
+        // Invalidate schema cache on DDL so column type changes are reflected.
+        String trimmedUpper = sql.trim().toUpperCase();
+        if (trimmedUpper.startsWith("CREATE") || trimmedUpper.startsWith("DROP")
+                || trimmedUpper.startsWith("ALTER")) {
+            tableSchemaCache.clear();
         }
 
         boolean readOnly = isReadOnly(sql);
