@@ -18,6 +18,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
     private final List<List<Object>> rows = new ArrayList<>();
     private int currentRow = 0;
     private String tableName = null;
+    private boolean lastWasNull = false;
 
     private final List<JSONObject> columnSchema;
 
@@ -61,22 +62,27 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public boolean wasNull() throws SQLException {
-        return false;
+        return lastWasNull;
+    }
+
+    /** Read a raw cell value and update lastWasNull. Returns null when NULL. */
+    private Object raw(int columnIndex) {
+        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
+        lastWasNull = (val == null || JSONObject.NULL.equals(val));
+        return lastWasNull ? null : val;
     }
 
     @Override
     public String getString(int columnIndex) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnIndex - 1))) {
-            return (String) rows.get(currentRow - 1).get(columnIndex - 1);
-        } else {
-            return null;
-        }
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
+        return val.toString();
     }
 
     @Override
     public boolean getBoolean(int columnIndex) throws SQLException {
-        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
-        if (JSONObject.NULL.equals(val) || val == null) return false;
+        Object val = raw(columnIndex);
+        if (lastWasNull) return false;
         if (val instanceof Boolean) return (Boolean) val;
         if (val instanceof Number) return ((Number) val).intValue() != 0;
         return Boolean.parseBoolean(val.toString());
@@ -94,42 +100,40 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public int getInt(int columnIndex) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnIndex - 1))) {
-            return (int) rows.get(currentRow - 1).get(columnIndex - 1);
-        } else {
-            return 0;
-        }
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0;
+        if (val instanceof Number) return ((Number) val).intValue();
+        return Integer.parseInt(val.toString());
     }
 
     @Override
     public long getLong(int columnIndex) throws SQLException {
-        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
-        if (JSONObject.NULL.equals(val) || val == null) return 0L;
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0L;
         if (val instanceof Number) return ((Number) val).longValue();
         return Long.parseLong(val.toString());
     }
 
     @Override
     public float getFloat(int columnIndex) throws SQLException {
-        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
-        if (JSONObject.NULL.equals(val) || val == null) return 0f;
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0f;
         if (val instanceof Number) return ((Number) val).floatValue();
         return Float.parseFloat(val.toString());
     }
 
     @Override
     public double getDouble(int columnIndex) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnIndex - 1))) {
-            return (double) rows.get(currentRow - 1).get(columnIndex - 1);
-        } else {
-            return 0;
-        }
+        Object val = raw(columnIndex);
+        if (lastWasNull) return 0.0;
+        if (val instanceof Number) return ((Number) val).doubleValue();
+        return Double.parseDouble(val.toString());
     }
 
     @Override
     public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException {
-        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
-        if (JSONObject.NULL.equals(val) || val == null) return null;
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
         return new BigDecimal(val.toString()).setScale(scale, java.math.RoundingMode.HALF_UP);
     }
 
@@ -140,8 +144,8 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Date getDate(int columnIndex) throws SQLException {
-        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
-        if (JSONObject.NULL.equals(val) || val == null) return null;
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
         return Date.valueOf(val.toString());
     }
 
@@ -152,8 +156,8 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Timestamp getTimestamp(int columnIndex) throws SQLException {
-        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
-        if (JSONObject.NULL.equals(val) || val == null) return null;
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
         return Timestamp.valueOf(val.toString());
     }
 
@@ -174,11 +178,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public String getString(String columnLabel) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel)))) {
-            return (String) rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel));
-        } else {
-            return null;
-        }
+        return getString(columnNames.indexOf(columnLabel) + 1);
     }
 
     @Override
@@ -198,11 +198,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public int getInt(String columnLabel) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel)))) {
-            return (int) rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel));
-        } else {
-            return 0;
-        }
+        return getInt(columnNames.indexOf(columnLabel) + 1);
     }
 
     @Override
@@ -217,11 +213,7 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public double getDouble(String columnLabel) throws SQLException {
-        if (!JSONObject.NULL.equals(rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel)))) {
-            return (double) rows.get(currentRow - 1).get(columnNames.indexOf(columnLabel));
-        } else {
-            return 0;
-        }
+        return getDouble(columnNames.indexOf(columnLabel) + 1);
     }
 
     @Override
@@ -286,14 +278,12 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public Object getObject(int columnIndex) throws SQLException {
-        List<Object> row = rows.get(currentRow - 1);
-        return row.get(columnIndex - 1);
+        return raw(columnIndex);
     }
 
     @Override
     public Object getObject(String columnLabel) throws SQLException {
-        List<Object> row = rows.get(currentRow - 1);
-        return row.get(columnNames.indexOf(columnLabel));
+        return getObject(columnNames.indexOf(columnLabel) + 1);
     }
 
     @Override
@@ -313,8 +303,8 @@ public class D1ResultSet extends D1Queryable implements java.sql.ResultSet {
 
     @Override
     public BigDecimal getBigDecimal(int columnIndex) throws SQLException {
-        Object val = rows.get(currentRow - 1).get(columnIndex - 1);
-        if (JSONObject.NULL.equals(val) || val == null) return null;
+        Object val = raw(columnIndex);
+        if (lastWasNull) return null;
         return new BigDecimal(val.toString());
     }
 
